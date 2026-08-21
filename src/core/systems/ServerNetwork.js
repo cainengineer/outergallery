@@ -7,6 +7,18 @@ import { createJWT, readJWT } from '../utils-server'
 import { cloneDeep, isNumber } from 'lodash-es'
 import * as THREE from '../extras/three'
 import { Ranks } from '../extras/ranks'
+import crypto from 'crypto'
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex')
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex')
+  return `${salt}:${hash}`
+}
+function verifyPassword(password, stored) {
+  const [salt, hash] = stored.split(':')
+  const check = crypto.scryptSync(password, salt, 64).toString('hex')
+  return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(check, 'hex'))
+}
 
 const SAVE_INTERVAL = parseInt(process.env.SAVE_INTERVAL || '60') // seconds
 const PING_RATE = 10 // seconds
@@ -218,13 +230,42 @@ export class ServerNetwork extends System {
       }
 
       // check connection params
-      let authToken = params.authToken
+            let authToken = params.authToken
       let name = params.name
       let avatar = params.avatar
+      const username = params.username
+      const password = params.password
 
-      // get or create user
       let user
-      if (authToken) {
+
+      // credential path takes precedence over JWT
+      if (username && password) {
+        const existing = await this.db('users').where('username', username).first()
+        if (existing) {
+          if (!existing.passwordHash || !verifyPassword(password, existing.passwordHash)) {
+            const packet = writePacket('kick', 'auth_failed')
+            ws.send(packet)
+            ws.close()
+            return
+          }
+          user = existing
+        } else {
+          user = {
+            id: uuid(),
+            name: name || username,
+            username,
+            passwordHash: hashPassword(password),
+            avatar: null,
+            rank: 0,
+            createdAt: moment().toISOString(),
+          }
+          await this.db('users').insert(user)
+        }
+        authToken = await createJWT({ userId: user.id })
+      }
+
+      // JWT path
+      if (!user && authToken) {
         try {
           const { userId } = await readJWT(authToken)
           user = await this.db('users').where('id', userId).first()
@@ -232,6 +273,8 @@ export class ServerNetwork extends System {
           console.error('failed to read authToken:', authToken)
         }
       }
+
+      // anonymous fallback
       if (!user) {
         user = {
           id: uuid(),
