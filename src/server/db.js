@@ -441,4 +441,14 @@ const migrations = [
       await trx.schema.renameTable('_config_new', 'config')
     })
   },
+    // add username + passwordHash for cross-device identity
+  async db => {
+    await db.schema.alterTable('users', table => {
+      table.string('username').nullable()
+      table.string('passwordHash').nullable()
+    })
+    await db.schema.alterTable('users', table => {
+      table.unique('username')
+    })
+  },
 ]

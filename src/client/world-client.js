@@ -6,6 +6,7 @@ import { css } from '@firebolt-dev/css'
 
 import { createClientWorld } from '../core/createClientWorld'
 import { CoreUI } from './components/CoreUI'
+import { storage } from '../core/storage'
 
 export { System } from '../core/systems/System'
 
@@ -40,7 +41,12 @@ export function Client({ wsUrl, onSetup }) {
         wsUrl = wsUrl()
         if (wsUrl instanceof Promise) wsUrl = await wsUrl
       }
-      const config = { viewport, ui, wsUrl, baseEnvironment }
+      let username, password
+      if (!storage.get('authToken') || new URLSearchParams(location.search).has('claim')) {
+        username = window.prompt('Username:')?.trim() || undefined
+        password = username ? window.prompt('Password:') || undefined : undefined
+      }
+      const config = { viewport, ui, wsUrl, baseEnvironment, username, password }
       onSetup?.(world, config)
       world.init(config)
     }
