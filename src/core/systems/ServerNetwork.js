@@ -255,6 +255,11 @@ export class ServerNetwork extends System {
       // livekit options
       const livekit = await this.world.livekit.serialize(user.id)
 
+      // admins spawn at a dedicated point
+      const isAdmin = user.rank >= Ranks.ADMIN
+      const spawnPosition = isAdmin ? [0, 13, 0] : this.spawn.position.slice()
+      const spawnQuaternion = isAdmin ? [0, 0, 0, 1] : this.spawn.quaternion.slice()
+
       // create socket
       const socket = new Socket({ id: user.id, ws, network: this })
 
@@ -263,8 +268,8 @@ export class ServerNetwork extends System {
         {
           id: user.id,
           type: 'player',
-          position: this.spawn.position.slice(),
-          quaternion: this.spawn.quaternion.slice(),
+          position: spawnPosition,
+          quaternion: spawnQuaternion,
           owner: socket.id, // deprecated, same as userId
           userId: user.id, // deprecated, same as userId
           name: name || user.name,
