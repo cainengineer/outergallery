@@ -451,4 +451,32 @@ const migrations = [
       table.unique('username')
     })
   },
+  // swap the live scene app to the ORCA Basin environment in src/world/scene.hyp
+  // (worlds created after this point already get it from the scene-app migration above)
+  async db => {
+    const row = await db('blueprints').where('id', '$scene').first()
+    if (!row) return
+    const rootDir = path.join(__dirname, '../')
+    const scenePath = path.join(rootDir, 'src/world/scene.hyp')
+    const buffer = await fs.readFile(scenePath)
+    const app = await importApp(new File([buffer], 'scene.hyp', { type: 'application/octet-stream' }))
+    for (const asset of app.assets) {
+      const filename = asset.url.split('asset://').pop()
+      const data = Buffer.from(await asset.file.arrayBuffer())
+      await assets.upload(new File([data], filename, { type: 'application/octet-stream' }))
+    }
+    const current = JSON.parse(row.data)
+    const next = {
+      ...current,
+      name: app.blueprint.name,
+      model: app.blueprint.model,
+      script: app.blueprint.script,
+      props: app.blueprint.props,
+      preload: true,
+      version: (current.version || 0) + 1,
+    }
+    await db('blueprints')
+      .where('id', '$scene')
+      .update({ data: JSON.stringify(next), updatedAt: moment().toISOString() })
+  },
 ]
