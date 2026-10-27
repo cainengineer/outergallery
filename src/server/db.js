@@ -506,4 +506,24 @@ const migrations = [
       .where('id', '$scene')
       .update({ data: JSON.stringify(next), updatedAt: moment().toISOString() })
   },
+  // swap only the sky background to the one in src/world/scene.hyp (keeps any in-world tweaks to light, fog, etc.)
+  async db => {
+    const row = await db('blueprints').where('id', '$scene').first()
+    if (!row) return
+    const rootDir = path.join(__dirname, '../')
+    const buffer = await fs.readFile(path.join(rootDir, 'src/world/scene.hyp'))
+    const app = await importApp(new File([buffer], 'scene.hyp', { type: 'application/octet-stream' }))
+    const sky = app.blueprint.props?.sky
+    if (!sky?.url) return
+    const asset = app.assets.find(a => a.url === sky.url)
+    if (!asset) return
+    const filename = asset.url.split('asset://').pop()
+    const data = Buffer.from(await asset.file.arrayBuffer())
+    await assets.upload(new File([data], filename, { type: 'application/octet-stream' }))
+    const current = JSON.parse(row.data)
+    const next = { ...current, props: { ...(current.props || {}), sky }, version: (current.version || 0) + 1 }
+    await db('blueprints')
+      .where('id', '$scene')
+      .update({ data: JSON.stringify(next), updatedAt: moment().toISOString() })
+  },
 ]
